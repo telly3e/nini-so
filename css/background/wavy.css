@@ -1,0 +1,94 @@
+/* original author: porsake */
+/* Adapted from https://codepen.io/porsake/pen/JjydjLz */
+
+* {
+    color: white;
+    z-index: 1;
+}
+
+.header-logo svg path {
+    stroke: white;
+    fill: rgba(198, 198, 198, 0.8);
+}
+
+.setting-btn svg path {
+    stroke: white;
+    fill: rgba(198, 198, 198, 0.8);
+}
+
+
+html,
+body {
+    /* 如果你的页面内容背景不是透明的，body背景最好也设为黑色 */
+    background-color: rgba(20, 20, 20, 1);
+    z-index: -1;
+    overflow: hidden;
+    position: relative;
+}
+
+/* 这是你的主要内容容器的样式 
+    position: relative 是为了确保它能浮在 z-index 为负数的背景之上
+*/
+
+
+
+/* --- 对 .wave 的关键改动 --- */
+.wave {
+    position: fixed;
+    /* 改动1: 使用 fixed 将其固定在浏览器视口上 */
+    top: 0;
+    /* 改动2: 定位到顶部 */
+    left: 0;
+    /* 改动3: 定位到左侧 */
+    width: 100%;
+    /* 确保宽度为100% */
+    height: 100%;
+    /* 确保高度为100% */
+    overflow: hidden;
+    /* 重要: 仍然需要 overflow:hidden 来裁剪巨大的span */
+    z-index: -2;
+    /* 改动4: 将其置于所有内容的后面 */
+
+    background: #4973ff;
+    box-shadow: inset 0 0 50px rgba(0, 0, 0, 0.5);
+    /* transition 不再需要，因为背景是固定的 */
+}
+
+.wave span {
+    content: "";
+    position: absolute;
+    width: 325vh;
+    height: 325vh;
+    top: 0;
+    left: 50%;
+    transform: translate(-50%, -75%);
+    background: #000;
+}
+
+.wave span:nth-child(1) {
+    border-radius: 45%;
+    background: rgba(20, 20, 20, 1);
+    animation: animate 5s linear infinite;
+}
+
+.wave span:nth-child(2) {
+    border-radius: 40%;
+    background: rgba(20, 20, 20, 0.5);
+    animation: animate 10s linear infinite;
+}
+
+.wave span:nth-child(3) {
+    border-radius: 42.5%;
+    background: rgba(20, 20, 20, 0.5);
+    animation: animate 15s linear infinite;
+}
+
+@keyframes animate {
+    0% {
+        transform: translate(-50%, -75%) rotate(0deg);
+    }
+
+    100% {
+        transform: translate(-50%, -75%) rotate(360deg);
+    }
+}
