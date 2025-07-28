@@ -3,6 +3,9 @@ This website's development has utilized the following excellent open source proj
 
 ---
 
+### Comic-Relief
+https://github.com/loudifier/Comic-Relief
+
 ### SVG Repo
 Some of Vectors and icons are made by or adapted from <a href="https://www.svgrepo.com" target="_blank">SVG Repo</a>
 
