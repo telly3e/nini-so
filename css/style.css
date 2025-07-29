@@ -14,7 +14,7 @@ body {
     width: 100%;
     margin: 0;
         padding: 0;
-        overflow-x: hidden;
+        overflow: hidden;
         /* 关键：禁止水平方向的滚动条 */
 }
 
