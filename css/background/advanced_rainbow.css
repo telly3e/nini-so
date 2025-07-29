@@ -1,6 +1,9 @@
-body {
+/* body,
+html {
     overflow: hidden;
 }
+
+*/
 
 .rainbow {
     z-index: -1;

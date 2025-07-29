@@ -7,11 +7,15 @@
         Arial, sans-serif;
 }
 
+/* 修改后的样式 */
+html,
 body {
-
-    height: 100vh;
+    height: 100%;
     width: 100%;
-
+    margin: 0;
+        padding: 0;
+        overflow-x: hidden;
+        /* 关键：禁止水平方向的滚动条 */
 }
 
 /* flex容器 */
@@ -21,6 +25,7 @@ body {
     display: flex;
     flex-direction: column;
     justify-content: space-between;
+    overflow: hidden;
 }
 
 /* header顶栏 */
