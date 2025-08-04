@@ -310,7 +310,7 @@ class GeoWeatehrBar extends HTMLElement {
 
             this.weatherIcon.setAttribute('src', `./img/weather-icon/${this.WEATHER_CODE_ICON[weatherData.current.weather_code]}${weatherData.current.is_day ? '-day' : '-night'}${additionWeather}.svg`);
         } else if ([0, 1, 2, 3, 45, 48].includes(Number(weatherData.current.weather_code))) {
-            this.weatherIcon.setAttribute('src', `./img/weather-icon/${weatherData.current.weather_code.toString()}${weatherData.current.is_day ? 'd' : 'n'}.svg`);
+            this.weatherIcon.setAttribute('src', `./img/weather-icon/${this.WEATHER_CODE_ICON[weatherData.current.weather_code]}${weatherData.current.is_day ? 'd' : 'n'}.svg`);
         } else {
             this.weatherIcon.setAttribute('src', `./img/weather-icon/${this.WEATHER_CODE_ICON[weatherData.current.weather_code]}.svg`);
         }
