@@ -1,8 +1,14 @@
 // geo-weather-bar.js
 const geoWeatherBarTemplate = document.createElement('template');
 
-geoWeatherBarTemplate.innerHTML = `
+geoWeatherBarTemplate.innerHTML = /*html*/`
 <style>
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
 .weather-geo {
     display: flex;
     flex-direction: column;
@@ -333,7 +339,7 @@ class GeoWeatehrBar extends HTMLElement {
 
     }
 
-    connectedCallback() { this.updateWeatherGeoInfo() }
+    // connectedCallback() { this.updateWeatherGeoInfo() }
 }
 
 window.customElements.define('geo-weather-bar', GeoWeatehrBar);

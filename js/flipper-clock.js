@@ -2,7 +2,7 @@
 // 这样做效率更高，因为模板的DOM在被实际使用前不会被渲染。
 const flipperClockTemplate = document.createElement('template');
 
-flipperClockTemplate.innerHTML = `
+flipperClockTemplate.innerHTML = /*html*/`
     <style>
         /* * 所有的CSS都从 style.css 文件复制到这里。
          * 注意：我们将一些选择器进行了修改，以适应Shadow DOM。

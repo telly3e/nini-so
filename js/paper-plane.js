@@ -1,6 +1,6 @@
 const paperPlaneTemplate = document.createElement('template');
 
-paperPlaneTemplate.innerHTML = `
+paperPlaneTemplate.innerHTML = /*html*/`
 <style>
 :host {
   display: block;

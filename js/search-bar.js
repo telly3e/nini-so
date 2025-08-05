@@ -1,14 +1,18 @@
 //search-bar.js
 
 const searchBarTemplate = document.createElement('template');
-searchBarTemplate.innerHTML = `
+searchBarTemplate.innerHTML = /*html*/`
 <style>
 :host {
+    --bar-width: 50vw;
+    --bar-height: 50px;
+}
+
+* {
     margin: 0;
     padding: 0;
     box-sizing: border-box;
     position: relative;
-    z-index:10;
 }
 
 .container {
@@ -22,15 +26,11 @@ searchBarTemplate.innerHTML = `
     gap: 10px;
     display: flex;
     align-items: center;
-    /* justify-content: space-between; */
-    height: 50px;
-    /* max-width: ; */
-    width: 60vw;
-    background-color: white;
+    height: var(--bar-height);
+    width: var(--bar-width);
     border: 1px solid rgb(171, 171, 171);
     border-radius: 25px;
     box-shadow: 0px 3px 10px 0px rgba(31, 31, 31, 0.08);
-
     background-color: rgba(255, 255, 255, 0.2);
     -webkit-backdrop-filter: blur(3px);
     backdrop-filter: blur(3px);
@@ -208,59 +208,80 @@ searchBarTemplate.innerHTML = `
     height: 27px;
 }
 
+.search-suggest {
+    width: var(--bar-width);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 2px;
+    border-radius: 6px;
+    box-shadow: 0px 3px 10px 0px rgba(31, 31, 31, 0.08);
+    background-color: rgba(255, 255, 255, 0.3);
+    -webkit-backdrop-filter: blur(3px);
+    backdrop-filter: blur(3px);
+}
+
+.suggest {
+    border-radius :inherit;
+    padding: 0px 10px 0px 10px;
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    gap: 5px;
+    cursor: pointer;
+}
+
+.suggest:hover{
+    background: white;
+    padding-left: 16px;
+}
+
+.suggest-icon {
+    width:24px;
+}
+
+.keyword {
+    width:100%;
+}
+
+.loader{
+    width:24px;
+    display: flex;
+    align-self: center;
+    padding: 3px;
+}
+
 /* 移动端调整 */
 @media screen and (max-width: 500px) {
     .container {
         gap: 5px;
     }
 
-    #search-bar {
-
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        height: 40px;
-        /* max-width: ; */
-        width: 80vw;
+    :host{
+    --bar-height: 40px;
+    --bar-width: 80vw;
     }
 
-    .engine-btn {
-        height: 100%;
-        padding-left: 10px;
-        padding-right: 10px;
-        background: none;
-        border: 0px solid;
-        border-radius: inherit;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        cursor: pointer;
-    }
-
-    .engine-btn svg {
-        width: 16px;
-        height: 16px;
-    }
-
+    .engine-btn,
     .search-btn {
+        height: 100%;
         padding-left: 10px;
         padding-right: 10px;
-        height: 100%;
         background: none;
-        border-radius: inherit;
-        /*lt rt rb lb*/
         border: 0px solid;
+        border-radius: inherit;
         display: flex;
         align-items: center;
         justify-content: center;
         cursor: pointer;
     }
 
-    .search-btn svg {
+    .engine-btn svg,
+    .search-btn svg{
         width: 16px;
         height: 16px;
     }
-    
+
     .search-engine-collection {
         max-width: 90vw;
         transform: scale(0.85);
@@ -293,7 +314,7 @@ searchBarTemplate.innerHTML = `
 <!-- 搜索栏 -->
 <div class="container">
 
-    <form id='search-bar' method="GET" target="_blank">
+    <form id='search-bar' method="get" target="_blank">
         <button type='button' class="engine-btn">
             <svg viewBox="-0.5 0 25 25" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <g id="SVGRepo_bgCarrier" stroke-width="0"></g>
@@ -347,6 +368,19 @@ searchBarTemplate.innerHTML = `
             </svg>
         </button>
     </form>
+
+<div class='search-suggest'>
+    <div class='suggest'><img class='suggest-icon' src='./img/suggest.svg'><span class='keyword'>1</span></div>
+    <div class='suggest'><img class='suggest-icon' src='./img/suggest.svg'><span class='keyword'>2</span></div>
+    <div class='suggest'><img class='suggest-icon' src='./img/suggest.svg'><span class='keyword'>3</span></div>
+    <div class='suggest'><img class='suggest-icon' src='./img/suggest.svg'><span class='keyword'>4</span></div>
+    <div class='suggest'><img class='suggest-icon' src='./img/suggest.svg'><span class='keyword'>5</span></div>
+    <div class='suggest'><img class='suggest-icon' src='./img/suggest.svg'><span class='keyword'>6</span></div>
+    <div class='suggest'><img class='suggest-icon' src='./img/suggest.svg'><span class='keyword'>7</span></div>
+    <div class='suggest'><img class='suggest-icon' src='./img/suggest.svg'><span class='keyword'>8</span></div>
+    <div class='suggest'><img class='suggest-icon' src='./img/suggest.svg'><span class='keyword'>9</span></div>
+    <div class='suggest'><img class='suggest-icon' src='./img/suggest.svg'><span class='keyword'>10</span></div>
+</div>
 
     <div class="search-engine-collection is-hidden scrollable-area no-select"></div>
 </div>
@@ -410,6 +444,7 @@ class SearchBar extends HTMLElement {
         this.searchInput = this.shadowRoot.getElementById('search-input');
         this.selectedEngine;
         this.clearBtn = this.shadowRoot.querySelector('.clear-btn')
+        this.searchSuggest = this.shadowRoot.querySelector(".search-suggest");
     }
 
     // --- 配置区域 ---
@@ -451,19 +486,116 @@ class SearchBar extends HTMLElement {
         }
     }
 
-    // connectedCallback 是一个生命周期钩子，当元素被添加到文档DOM中时触发
+
+    // --- 搜索建议 ---
+    getSuggestions() {
+        const valWord = this.searchInput.value.trim();
+        this.searchSuggest.classList.remove('is-hidden');
+        this.searchSuggest.innerHTML = `
+        <img class='loader' src='./img/dark-loader.svg'>
+        `;
+
+        // 移除旧的 script
+        const old = document.getElementById("jsonp_script");
+        if (old) document.body.removeChild(old);
+
+        if (!valWord) {
+            this.searchSuggest.innerHTML = '';
+            this.searchSuggest.classList.add('is-hidden');
+            return;
+        }
+
+        // --- 关键修改：将组件的方法暴露到全局 ---
+        // 使用 .bind(this) 来确保回调函数中的 'this' 指向组件实例
+        window.jsonpCallback = this.jsonpCallback.bind(this);
+        // --- 修改结束 ---
+
+        let url = "";
+        const callbackName = "jsonpCallback"; // 回调函数名固定为我们挂在window上的那个
+
+        switch (this.selectedEngine) {
+            case "baidu":
+                url = `https://www.baidu.com/sugrec?pre=1&p=3&ie=utf-8&json=1&prod=pc&wd=${encodeURIComponent(valWord)}&cb=${callbackName}`;
+                break;
+            case "bing":
+                url = `https://api.bing.com/qsonhs.aspx?type=cb&q=${encodeURIComponent(valWord)}&cb=${callbackName}`;
+                break;
+            case "google":
+                url = `https://suggestqueries.google.com/complete/search?client=chrome&q=${encodeURIComponent(valWord)}&callback=${callbackName}`;
+                break;
+        }
+
+        if (!url) return; // 如果没有匹配的引擎，则不执行后续操作
+
+        const sc = document.createElement("script");
+        sc.src = url;
+        sc.id = "jsonp_script";
+        document.body.appendChild(sc);
+    }
+
+    jsonpCallback(data) {
+        const searchSuggest = this.searchSuggest;
+        const engine = this.selectedEngine;
+        let suggestions = [];
+
+        // ... (您原来的 switch-case 逻辑保持不变)
+        switch (engine) {
+            case "baidu":
+                suggestions = data?.g?.map(item => item.q) || [];
+                break;
+            case "bing":
+                suggestions = data?.AS?.Results?.[0]?.Suggests?.map(item => item.Txt) || [];
+                break;
+            case "google":
+                suggestions = data?.[1] || [];
+                break;
+        }
+
+        const uniqueSuggestions = new Set();
+        for (const txt of suggestions) {
+            if (uniqueSuggestions.size < 10) {
+                uniqueSuggestions.add(txt);
+            } else { break; }
+        }
+
+        // 清空旧的建议
+        this.searchSuggest.innerHTML = '';
+
+        uniqueSuggestions.forEach(txt => {
+            const suggestDiv = document.createElement("div"); // 注意：是在 document 上创建
+            suggestDiv.classList.add('suggest');
+            suggestDiv.innerHTML = `
+            <img class='suggest-icon' src='./img/suggest.svg'>
+            <span class='keyword'>${txt}</span>
+        `;
+            suggestDiv.onclick = () => window.open(`https://www.${engine}.com/search?q=${encodeURIComponent(txt)}`);
+            searchSuggest.appendChild(suggestDiv);
+        });
+
+        // --- 关键修改：清理工作 ---
+        // 1. 清除 script 标签
+        const sc = document.getElementById("jsonp_script");
+        if (sc) sc.remove(); // .remove() 是更现代的写法
+
+        // 2. 将挂载到 window 上的函数删除，避免内存泄漏和全局污染
+        delete window.jsonpCallback;
+        // --- 修改结束 ---
+
+        console.log(engine, data);
+    }
+
+
+    // connectedCallback --> 当元素被添加到文档DOM中时触发
     connectedCallback() {
-        // Correctly call the class method
+        // 渲染引擎grid
         this.renderSearchEngines();
 
         // --- 状态管理 ---
-        // 默认搜索引擎
+        // 设置默认搜索引擎
         this.selectedEngine = 'bing';
-        // This method needs `this` context as well, let's correct it inside the class
         this.updateEngineViaAttribute(this.selectedEngine);
 
-        // 事件监听
-        // Use an arrow function to preserve `this`
+        // --- 事件监听 ---
         this.engineCollection.addEventListener('click', (event) => {
             const clickedBtn = event.target.closest('.engine-item');
             if (!clickedBtn) return;
@@ -480,50 +612,66 @@ class SearchBar extends HTMLElement {
             console.log(`搜索引擎已切换为 ${this.selectedEngine}`);
         });
 
-        // Use an arrow function to preserve `this`
+        // form submit监听 --> 更新搜索引擎
         this.form.addEventListener('submit', (event) => {
             const engineConfig = this.SEARCH_ENGINES[this.selectedEngine];
             this.form.action = engineConfig.action;
             this.searchInput.name = engineConfig.name;
         });
 
+        // 搜索栏聚焦监测 --> 若建议为空则获取建议，同时隐藏引擎grid，去除引擎按钮高亮
+        this.searchInput.addEventListener('focus', () => {
+            if (this.searchInput.value && this.searchSuggest.innerHTML === '') {
+                this.getSuggestions();
+                this.engineCollection.classList.add('is-hidden');
+                this.engineBtn.classList.remove('btn-active');
+            }
+        });
+
+        // 输入框为空阻止submit
         this.searchInput.addEventListener('invalid', (event) => {
             event.preventDefault();
             console.log("输入框为空，已阻止浏览器默认提示。");
         });
 
-        // Use an arrow function and `this.inputElement`
+        // 清除按钮点击监测 --> 清空输入栏和搜索建议
         this.clearBtn.addEventListener('click', () => {
             this.inputElement.value = '';
+            this.searchSuggest.innerHTML = '';
+            this.searchSuggest.classList.add('is-hidden');
             this.inputElement.focus();
         });
 
+        // 点击到页面其他部分 --> 收起 引擎grid和搜索建议
         document.addEventListener('click', (event) => {
             if (!this.engineCollection.classList.contains('is-hidden') && event.target.tagName.toLowerCase() != 'search-bar') {
                 this.engineCollection.classList.add('is-hidden');
                 this.engineBtn.classList.remove('btn-active');
             }
+
+            if (!event.target.closest('.search-suggest') && event.target.tagName.toLowerCase() != 'search-bar') {
+                this.searchSuggest.innerHTML = '';
+                this.searchSuggest.classList.add('is-hidden');
+            }
         })
 
-        // Use an arrow function to fix the main error
-        this.shadowRoot.addEventListener('click', (event) => {
-            // We query for the button inside the component's shadow DOM
-            // const clickedEngineBtn = event.target.closest('search-bar')
-            //     ?.shadowRoot.querySelector('.engine-btn')
-            //     .contains(event.target);
+        // 引擎按钮监测 --> 切换
+        this.shadowRoot.addEventListener('click', (event) => {    
             const clickedEngineBtn = event.target.closest('.engine-btn');
 
             if (clickedEngineBtn) {
                 this.engineCollection.classList.toggle('is-hidden');
                 this.engineBtn.classList.toggle('btn-active');
+                this.searchSuggest.classList.add('is-hidden'); // 防止搜索建议占位
             } else if (!this.engineCollection.classList.contains('is-hidden') && !event.target.closest('.search-engine-collection')) {
                 this.engineCollection.classList.add('is-hidden');
                 this.engineBtn.classList.toggle('btn-active');
             }
         });
 
+        // 监测输入栏 --> 更新搜索建议
+        this.searchInput.addEventListener("input", () => this.getSuggestions());   
 
-        // Correctly call the class method
         this.updateDefaultEngine();
     }
 
