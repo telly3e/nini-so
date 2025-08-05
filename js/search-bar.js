@@ -227,8 +227,10 @@ searchBarTemplate.innerHTML = /*html*/`
     width: 100%;
     display: flex;
     justify-content: center;
+    align-items: center;
     gap: 5px;
     cursor: pointer;
+    min-height: 30px;
 }
 
 .suggest:hover{
@@ -300,7 +302,7 @@ searchBarTemplate.innerHTML = /*html*/`
 }
 
 .is-hidden {
-    display: none;
+    display: none !important; /* Use important to ensure override */
 }
 
 .no-select {
@@ -311,7 +313,6 @@ searchBarTemplate.innerHTML = /*html*/`
 }
 </style>
 
-<!-- 搜索栏 -->
 <div class="container">
 
     <form id='search-bar' method="get" target="_blank">
@@ -340,7 +341,7 @@ searchBarTemplate.innerHTML = /*html*/`
             </svg>
         </button>
         <div class="search-input-wrapper">
-            <input id="search-input" class="no-select" type="text" placeholder="siuuu..." title='' required>
+            <input id="search-input" class="no-select" type="text" placeholder="siuuu..." title='' required autocomplete="off">
             <button type="button" class="clear-btn">
                 <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <g id="SVGRepo_bgCarrier" stroke-width="0"></g>
@@ -369,18 +370,7 @@ searchBarTemplate.innerHTML = /*html*/`
         </button>
     </form>
 
-<div class='search-suggest'>
-    <div class='suggest'><img class='suggest-icon' src='./img/suggest.svg'><span class='keyword'>1</span></div>
-    <div class='suggest'><img class='suggest-icon' src='./img/suggest.svg'><span class='keyword'>2</span></div>
-    <div class='suggest'><img class='suggest-icon' src='./img/suggest.svg'><span class='keyword'>3</span></div>
-    <div class='suggest'><img class='suggest-icon' src='./img/suggest.svg'><span class='keyword'>4</span></div>
-    <div class='suggest'><img class='suggest-icon' src='./img/suggest.svg'><span class='keyword'>5</span></div>
-    <div class='suggest'><img class='suggest-icon' src='./img/suggest.svg'><span class='keyword'>6</span></div>
-    <div class='suggest'><img class='suggest-icon' src='./img/suggest.svg'><span class='keyword'>7</span></div>
-    <div class='suggest'><img class='suggest-icon' src='./img/suggest.svg'><span class='keyword'>8</span></div>
-    <div class='suggest'><img class='suggest-icon' src='./img/suggest.svg'><span class='keyword'>9</span></div>
-    <div class='suggest'><img class='suggest-icon' src='./img/suggest.svg'><span class='keyword'>10</span></div>
-</div>
+    <div class='search-suggest is-hidden'></div>
 
     <div class="search-engine-collection is-hidden scrollable-area no-select"></div>
 </div>
@@ -388,26 +378,18 @@ searchBarTemplate.innerHTML = /*html*/`
 
 class SearchBar extends HTMLElement {
     constructor() {
-        // 必须首先调用 super()
         super();
-
-        // 1. 创建 Shadow Root
-        // 将 Shadow DOM 附加到我们的组件上
-        this.attachShadow({ mode: 'open' }); // 'open' 表示可以从外部JS访问Shadow DOM
-
-        // 2. 将模板内容附加到 Shadow Root
-        // .cloneNode(true) 表示深度克隆，包含所有子元素
+        this.attachShadow({
+            mode: 'open'
+        });
         this.shadowRoot.appendChild(searchBarTemplate.content.cloneNode(true));
 
-        // 3. 将组件内的元素缓存起来，方便后续使用
-        // 注意我们是从 this.shadowRoot 中查询元素的
         this.SEARCH_ENGINES = {
-            // 'google' 是内部使用的key, 用于事件委托和表单提交
             'google': {
-                displayName: 'Google', // 用于显示在 <span class="engine-name">
-                icon: './img/engine/google.svg', // 用于 <img class="engine-icon"> 的 src
+                displayName: 'Google',
+                icon: './img/engine/google.svg',
                 action: 'https://www.google.com/search',
-                name: 'q' // 用于 <input> 的 name 属性
+                name: 'q'
             },
             'baidu': {
                 displayName: 'Baidu',
@@ -427,77 +409,61 @@ class SearchBar extends HTMLElement {
                 action: 'https://duckduckgo.com/',
                 name: 'q'
             }
-            // 未来添加新引擎，只需在这里新增一个对象即可
-            // 未来可以轻松添加，例如：
-            // 'github': {
-            //     action: 'https://github.com/search',
-            //     name: 'q'
-            // }
         };
-        // 搜索按钮
+
         this.inputElement = this.shadowRoot.getElementById('search-input');
-        // 引擎grid
         this.engineCollection = this.shadowRoot.querySelector('.search-engine-collection');
         this.engineBtn = this.shadowRoot.querySelector('.engine-btn');
-        // --- DOM 元素获取 ---
         this.form = this.shadowRoot.getElementById('search-bar');
         this.searchInput = this.shadowRoot.getElementById('search-input');
         this.selectedEngine;
-        this.clearBtn = this.shadowRoot.querySelector('.clear-btn')
+        this.clearBtn = this.shadowRoot.querySelector('.clear-btn');
         this.searchSuggest = this.shadowRoot.querySelector(".search-suggest");
+
+        // MODIFIED: The cache is still an object, but we will use it to store engine-specific caches.
+        this.suggestionsCache = {};
+        this.currentQuery = '';
+        this.currentRequestEngine = ''; // To track the engine for the current request
     }
 
-    // --- 配置区域 ---
-
-    // 根据 SEARCH_ENGINES 对象渲染搜索引擎列表的函数
     renderSearchEngines() {
         this.engineCollection.innerHTML = '';
-
         let isFirst = true;
-
         for (const [engineKey, engineData] of Object.entries(this.SEARCH_ENGINES)) {
             const itemHTML = `
-    <div class="engine-item ${isFirst ? 'active' : ''}" data-engine="${engineKey}">
-        <img class="engine-icon" src="${engineData.icon}" />
-        <span class="engine-name">${engineData.displayName}</span>
-    </div>
-    `;
-
+                <div class="engine-item ${isFirst ? 'active' : ''}" data-engine="${engineKey}">
+                    <img class="engine-icon" src="${engineData.icon}" />
+                    <span class="engine-name">${engineData.displayName}</span>
+                </div>`;
             this.engineCollection.insertAdjacentHTML('beforeend', itemHTML);
-            isFirst = false
+            isFirst = false;
         }
     }
 
+    // MODIFIED: Added logic to hide suggestions when the engine changes.
     updateEngineViaAttribute(engineAttribute) {
-        this.engineCollection.querySelectorAll('.engine-item').forEach(btn => {
-            btn.classList.remove('active');
-        });
+        this.engineCollection.querySelectorAll('.engine-item').forEach(btn => btn.classList.remove('active'));
         const selectedItem = this.shadowRoot.querySelector(`[data-engine="${engineAttribute}"]`);
-        selectedItem.classList.add('active');
-        this.selectedEngine = engineAttribute;
-        console.log(`搜索引擎已切换为${this.selectedEngine}`);
+        if (selectedItem) {
+            selectedItem.classList.add('active');
+            this.selectedEngine = engineAttribute;
+            this.searchSuggest.classList.add('is-hidden'); // Hide suggestions on engine switch
+            console.log(`Search engine switched to ${this.selectedEngine}`);
+        }
     }
 
-    // 一个自定义方法，用来根据属性更新engine
     updateDefaultEngine() {
         const defaultEngine = this.getAttribute('default-engine');
-        if (defaultEngine) {
+        if (defaultEngine && this.SEARCH_ENGINES[defaultEngine]) {
             this.updateEngineViaAttribute(defaultEngine);
         }
     }
 
+    // --- Search Suggestions ---
 
-    // --- 搜索建议 ---
+    // MODIFIED: getSuggestions now checks the engine-specific cache.
     getSuggestions() {
         const valWord = this.searchInput.value.trim();
-        this.searchSuggest.classList.remove('is-hidden');
-        this.searchSuggest.innerHTML = `
-        <img class='loader' src='./img/dark-loader.svg'>
-        `;
-
-        // 移除旧的 script
-        const old = document.getElementById("jsonp_script");
-        if (old) document.body.removeChild(old);
 
         if (!valWord) {
             this.searchSuggest.innerHTML = '';
@@ -505,13 +471,29 @@ class SearchBar extends HTMLElement {
             return;
         }
 
-        // --- 关键修改：将组件的方法暴露到全局 ---
-        // 使用 .bind(this) 来确保回调函数中的 'this' 指向组件实例
+        // MODIFIED: Check cache for the current engine.
+        // The optional chaining (?.) prevents an error if the engine has no cache yet.
+        if (this.suggestionsCache[this.selectedEngine]?.[valWord]) {
+            console.log(`Rendering suggestions for "${valWord}" on "${this.selectedEngine}" from cache.`);
+            this.renderSuggestions(this.suggestionsCache[this.selectedEngine][valWord]);
+            return;
+        }
+
+        this.engineCollection.classList.add('is-hidden');
+        this.engineBtn.classList.remove('btn-active');
+        this.searchSuggest.classList.remove('is-hidden');
+        this.searchSuggest.innerHTML = `<img class='loader' src='./img/dark-loader.svg'>`;
+
+        this.currentQuery = valWord;
+        this.currentRequestEngine = this.selectedEngine; // MODIFIED: Remember the engine for this request.
+
+        const old = document.getElementById("jsonp_script");
+        if (old) document.body.removeChild(old);
+
         window.jsonpCallback = this.jsonpCallback.bind(this);
-        // --- 修改结束 ---
 
         let url = "";
-        const callbackName = "jsonpCallback"; // 回调函数名固定为我们挂在window上的那个
+        const callbackName = "jsonpCallback";
 
         switch (this.selectedEngine) {
             case "baidu":
@@ -525,7 +507,10 @@ class SearchBar extends HTMLElement {
                 break;
         }
 
-        if (!url) return; // 如果没有匹配的引擎，则不执行后续操作
+        if (!url) {
+            this.searchSuggest.classList.add('is-hidden');
+            return;
+        };
 
         const sc = document.createElement("script");
         sc.src = url;
@@ -533,13 +518,13 @@ class SearchBar extends HTMLElement {
         document.body.appendChild(sc);
     }
 
+    // MODIFIED: jsonpCallback now saves to the engine-specific cache.
     jsonpCallback(data) {
-        const searchSuggest = this.searchSuggest;
-        const engine = this.selectedEngine;
+        // Use the engine that was active when the request was made.
+        const engineForRequest = this.currentRequestEngine;
         let suggestions = [];
 
-        // ... (您原来的 switch-case 逻辑保持不变)
-        switch (engine) {
+        switch (engineForRequest) {
             case "baidu":
                 suggestions = data?.g?.map(item => item.q) || [];
                 break;
@@ -551,90 +536,86 @@ class SearchBar extends HTMLElement {
                 break;
         }
 
-        const uniqueSuggestions = new Set();
-        for (const txt of suggestions) {
-            if (uniqueSuggestions.size < 10) {
-                uniqueSuggestions.add(txt);
-            } else { break; }
+        const uniqueSuggestions = [...new Set(suggestions)].slice(0, 10);
+
+        // MODIFIED: Create a cache object for the engine if it doesn't exist.
+        if (!this.suggestionsCache[engineForRequest]) {
+            this.suggestionsCache[engineForRequest] = {};
         }
 
-        // 清空旧的建议
-        this.searchSuggest.innerHTML = '';
+        // MODIFIED: Save the suggestions to the engine-specific cache.
+        this.suggestionsCache[engineForRequest][this.currentQuery] = uniqueSuggestions;
+        console.log(`Fetched and cached suggestions for "${this.currentQuery}" on "${engineForRequest}".`);
 
-        uniqueSuggestions.forEach(txt => {
-            const suggestDiv = document.createElement("div"); // 注意：是在 document 上创建
-            suggestDiv.classList.add('suggest');
-            suggestDiv.innerHTML = `
-            <img class='suggest-icon' src='./img/suggest.svg'>
-            <span class='keyword'>${txt}</span>
-        `;
-            suggestDiv.onclick = () => window.open(`https://www.${engine}.com/search?q=${encodeURIComponent(txt)}`);
-            searchSuggest.appendChild(suggestDiv);
-        });
+        // Only render the suggestions if the input value hasn't changed to something else
+        if (this.currentQuery === this.searchInput.value.trim()) {
+            this.renderSuggestions(uniqueSuggestions);
+        }
 
-        // --- 关键修改：清理工作 ---
-        // 1. 清除 script 标签
         const sc = document.getElementById("jsonp_script");
-        if (sc) sc.remove(); // .remove() 是更现代的写法
-
-        // 2. 将挂载到 window 上的函数删除，避免内存泄漏和全局污染
+        if (sc) sc.remove();
         delete window.jsonpCallback;
-        // --- 修改结束 ---
 
-        console.log(engine, data);
+        console.log(engineForRequest, data);
     }
 
+    renderSuggestions(suggestions) {
+        this.searchSuggest.innerHTML = '';
+        if (suggestions.length === 0) {
+            this.searchSuggest.classList.add('is-hidden');
+            return;
+        }
 
-    // connectedCallback --> 当元素被添加到文档DOM中时触发
+        this.searchSuggest.classList.remove('is-hidden');
+        this.engineCollection.classList.add('is-hidden');
+        this.engineBtn.classList.remove('btn-active')
+
+        suggestions.forEach(txt => {
+            const suggestDiv = document.createElement("div");
+            suggestDiv.classList.add('suggest');
+            suggestDiv.innerHTML = `
+                <img class='suggest-icon' src='./img/suggest.svg'>
+                <span class='keyword'>${txt}</span>`;
+            suggestDiv.addEventListener('mousedown', (event) => {
+                event.preventDefault();
+                this.searchInput.value = txt;
+                this.form.requestSubmit();
+            });
+            this.searchSuggest.appendChild(suggestDiv);
+        });
+    }
+
     connectedCallback() {
-        // 渲染引擎grid
         this.renderSearchEngines();
 
-        // --- 状态管理 ---
-        // 设置默认搜索引擎
         this.selectedEngine = 'bing';
         this.updateEngineViaAttribute(this.selectedEngine);
 
-        // --- 事件监听 ---
         this.engineCollection.addEventListener('click', (event) => {
             const clickedBtn = event.target.closest('.engine-item');
             if (!clickedBtn) return;
-
             const engineName = clickedBtn.dataset.engine;
-            if (!engineName || !this.SEARCH_ENGINES[engineName]) return;
-
-            this.engineCollection.querySelectorAll('.engine-item').forEach(btn => {
-                btn.classList.remove('active');
-            });
-
-            clickedBtn.classList.add('active');
-            this.selectedEngine = engineName;
-            console.log(`搜索引擎已切换为 ${this.selectedEngine}`);
+            if (engineName && this.SEARCH_ENGINES[engineName]) {
+                this.updateEngineViaAttribute(engineName);
+            }
         });
 
-        // form submit监听 --> 更新搜索引擎
         this.form.addEventListener('submit', (event) => {
             const engineConfig = this.SEARCH_ENGINES[this.selectedEngine];
             this.form.action = engineConfig.action;
             this.searchInput.name = engineConfig.name;
         });
 
-        // 搜索栏聚焦监测 --> 若建议为空则获取建议，同时隐藏引擎grid，去除引擎按钮高亮
         this.searchInput.addEventListener('focus', () => {
-            if (this.searchInput.value && this.searchSuggest.innerHTML === '') {
+            if (this.searchInput.value) {
                 this.getSuggestions();
-                this.engineCollection.classList.add('is-hidden');
-                this.engineBtn.classList.remove('btn-active');
             }
         });
 
-        // 输入框为空阻止submit
         this.searchInput.addEventListener('invalid', (event) => {
             event.preventDefault();
-            console.log("输入框为空，已阻止浏览器默认提示。");
         });
 
-        // 清除按钮点击监测 --> 清空输入栏和搜索建议
         this.clearBtn.addEventListener('click', () => {
             this.inputElement.value = '';
             this.searchSuggest.innerHTML = '';
@@ -642,35 +623,28 @@ class SearchBar extends HTMLElement {
             this.inputElement.focus();
         });
 
-        // 点击到页面其他部分 --> 收起 引擎grid和搜索建议
         document.addEventListener('click', (event) => {
-            if (!this.engineCollection.classList.contains('is-hidden') && event.target.tagName.toLowerCase() != 'search-bar') {
+            if (!this.contains(event.target)) {
                 this.engineCollection.classList.add('is-hidden');
                 this.engineBtn.classList.remove('btn-active');
-            }
-
-            if (!event.target.closest('.search-suggest') && event.target.tagName.toLowerCase() != 'search-bar') {
-                this.searchSuggest.innerHTML = '';
                 this.searchSuggest.classList.add('is-hidden');
-            }
-        })
-
-        // 引擎按钮监测 --> 切换
-        this.shadowRoot.addEventListener('click', (event) => {    
-            const clickedEngineBtn = event.target.closest('.engine-btn');
-
-            if (clickedEngineBtn) {
-                this.engineCollection.classList.toggle('is-hidden');
-                this.engineBtn.classList.toggle('btn-active');
-                this.searchSuggest.classList.add('is-hidden'); // 防止搜索建议占位
-            } else if (!this.engineCollection.classList.contains('is-hidden') && !event.target.closest('.search-engine-collection')) {
-                this.engineCollection.classList.add('is-hidden');
-                this.engineBtn.classList.toggle('btn-active');
             }
         });
 
-        // 监测输入栏 --> 更新搜索建议
-        this.searchInput.addEventListener("input", () => this.getSuggestions());   
+        this.shadowRoot.addEventListener('click', (event) => {
+            if (!event.target.closest('.engine-btn') && !this.engineCollection.classList.contains('is-hidden')) {
+                this.engineCollection.classList.toggle('is-hidden');
+                this.engineBtn.classList.toggle('btn-active');
+            }
+        })
+
+        this.engineBtn.addEventListener('click', () => {
+            this.engineCollection.classList.toggle('is-hidden');
+            this.engineBtn.classList.toggle('btn-active');
+            this.searchSuggest.classList.add('is-hidden');
+        });
+
+        this.searchInput.addEventListener("input", () => this.getSuggestions());
 
         this.updateDefaultEngine();
     }
@@ -679,11 +653,10 @@ class SearchBar extends HTMLElement {
         this.engineCollection.removeEventListener('click');
         this.form.removeEventListener('submit');
         this.searchInput.removeEventListener('invalid');
-        this.shadowRoot.querySelector('.clear-btn').removeEventListener('click');
-        document.removeEventListener('click');
+        this.clearBtn.removeEventListener('click');
+        this.engineBtn.removeEventListener('click');
+        this.searchInput.removeEventListener('input');
     }
-
-
 }
 
 window.customElements.define('search-bar', SearchBar);

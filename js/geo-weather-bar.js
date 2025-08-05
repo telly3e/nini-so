@@ -1,4 +1,5 @@
 // geo-weather-bar.js
+
 const geoWeatherBarTemplate = document.createElement('template');
 
 geoWeatherBarTemplate.innerHTML = /*html*/`
@@ -7,6 +8,42 @@ geoWeatherBarTemplate.innerHTML = /*html*/`
     margin: 0;
     padding: 0;
     box-sizing: border-box;
+}
+
+:host {
+        display: block; /* 必须是 block 才能让 max-height 生效 */
+
+        /* 关键：为了让 max-height 生效，超出部分需要隐藏 */
+        overflow: hidden;
+
+        /* --- 可见时的状态 (动画的起点) --- */
+        opacity: 1;
+        transform: translateY(0);
+
+        /* 关键：设置一个足够大的 max-height，必须比你组件的实际高度要大。
+           根据实际情况调整这个值。
+        */
+        max-height: 120px;
+
+        /* --- 动画的定义 --- */
+        /* 为多个属性分别定义过渡效果，可以让动画更有层次感 */
+        transition: max-height 0.4s ease-in-out,
+                    opacity 0.3s ease-out,
+                    transform 0.3s ease-out;
+}
+
+    /* 当组件拥有 is-hidden class 时的状态 */
+:host(.animated-hidden) {
+        opacity: 0;
+        transform: translateY(-15px);
+
+        /* 关键：将 max-height 设为 0，元素将不再占用垂直空间 */
+        max-height: 0;
+
+        /* 虽然元素高度为0了，但为了保险起见，
+           最好还是加上 pointer-events: none; 来禁用所有鼠标交互。
+        */
+        pointer-events: none;
 }
 
 .weather-geo {
@@ -339,7 +376,7 @@ class GeoWeatehrBar extends HTMLElement {
 
     }
 
-    // connectedCallback() { this.updateWeatherGeoInfo() }
+    connectedCallback() { this.updateWeatherGeoInfo() }
 }
 
 window.customElements.define('geo-weather-bar', GeoWeatehrBar);

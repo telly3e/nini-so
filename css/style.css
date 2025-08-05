@@ -19,6 +19,13 @@
 
 }
 
+/* 问候 */
+.greeting {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 5px;
+}
 /* 纸飞机背景位置 */
 paper-plane {
     /* 将 paper-plane 组件本身抽离文档流 */
