@@ -32,7 +32,7 @@ geoWeatherBarTemplate.innerHTML = /*html*/`
                     transform 0.3s ease-out;
 }
 
-    /* 当组件拥有 is-hidden class 时的状态 */
+
 :host(.animated-hidden) {
         opacity: 0;
         transform: translateY(-15px);
@@ -89,6 +89,10 @@ geoWeatherBarTemplate.innerHTML = /*html*/`
 
 .invisible {
     visibility: hidden;
+}
+
+.is-hidden {
+    display: none;
 }
 
 @media screen and (max-width: 500px) {
@@ -321,12 +325,16 @@ class GeoWeatehrBar extends HTMLElement {
         if (region && region !== lastValue) {
             this.geoRegion.innerHTML = region;
             lastValue = region;
+        } else {
+            this.geoRegion.classList.add('is-hidden');
         }
 
         // 最后处理城市，前提是城市存在且不与地区名称重复
         // （如果地区和国家一样，lastValue已经是国家名了，这里也能正确处理）
-        if (city && city !== lastValue) {
+        if ((city && city !== lastValue) && (city !== country)) {
             this.geoCity.innerHTML = city;
+        } else {
+            this.geoCity.classList.add('is-hidden');
         }
 
 

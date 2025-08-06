@@ -297,6 +297,10 @@ searchBarTemplate.innerHTML = /*html*/`
 }
 
 /* 状态类 */
+.selected {
+    background-color: #eee;
+}
+
 .btn-active {
     background-color: rgba(0, 0, 0, 0.25);
 }
@@ -645,6 +649,43 @@ class SearchBar extends HTMLElement {
         });
 
         this.searchInput.addEventListener("input", () => this.getSuggestions());
+
+        this.searchInput.addEventListener('keydown', (e) => {
+            const suggestions = this.searchSuggest.querySelectorAll('.suggest');
+            if (suggestions.length === 0) {
+                return;
+            }
+
+            let selectedIndex = -1;
+            for (let i = 0; i < suggestions.length; i++) {
+                if (suggestions[i].classList.contains('selected')) {
+                    selectedIndex = i;
+                    break;
+                }
+            }
+
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                if (selectedIndex < suggestions.length - 1) {
+                    if (selectedIndex !== -1) {
+                        suggestions[selectedIndex].classList.remove('selected');
+                    }
+                    suggestions[selectedIndex + 1].classList.add('selected');
+                }
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                if (selectedIndex > 0) {
+                    suggestions[selectedIndex].classList.remove('selected');
+                    suggestions[selectedIndex - 1].classList.add('selected');
+                }
+            } else if (e.key === 'Enter') {
+                if (selectedIndex !== -1) {
+                    e.preventDefault();
+                    this.searchInput.value = suggestions[selectedIndex].querySelector('.keyword').textContent;
+                    this.form.requestSubmit();
+                }
+            }
+        });
 
         this.updateDefaultEngine();
     }
