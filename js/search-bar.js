@@ -592,7 +592,7 @@ class SearchBar extends HTMLElement {
     connectedCallback() {
         this.renderSearchEngines();
 
-        this.selectedEngine = 'bing';
+        this.selectedEngine = mySettings['prefer_engine'];
         this.updateEngineViaAttribute(this.selectedEngine);
 
         this.engineCollection.addEventListener('click', (event) => {
@@ -601,6 +601,8 @@ class SearchBar extends HTMLElement {
             const engineName = clickedBtn.dataset.engine;
             if (engineName && this.SEARCH_ENGINES[engineName]) {
                 this.updateEngineViaAttribute(engineName);
+                mySettings['prefer_engine'] = engineName;
+                updateUserSetting(mySettings);
             }
         });
 
@@ -687,7 +689,9 @@ class SearchBar extends HTMLElement {
             }
         });
 
-        this.updateDefaultEngine();
+        if (!mySettings) {
+            this.updateDefaultEngine();
+        }
     }
 
     disconnectedCallback() {
