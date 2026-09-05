@@ -126,16 +126,68 @@ test('disconnect cancels resources and all handlers; reconnect installs handlers
     assert.equal(count, 1);
     bar.disconnectedCallback();
 });
-test('clock theme follows initial preference and subsequent changes', () => {
+function globalContext() {
     const media = new EventTarget(); media.matches = false;
-    const input = new Element(); let theme;
-    const context = vm.createContext({ window: { matchMedia: () => media }, document: { querySelector: selector =>
-        selector === 'search-bar' ? { shadowRoot: { getElementById: () => input } } :
-        selector === 'flipper-clock' ? { setAttribute: (_name, value) => { theme = value; } } : new Element() } });
+    const searchBar = new Element(); searchBar.shadowRoot = new Element();
+    const geo = new Element(), footer = new Element(), document = new Element();
+    let theme;
+    // Support the force argument used by DOMTokenList.toggle.
+    for (const element of [geo, footer]) element.classList.toggle = (name, force) => {
+        if (force) element.classes.add(name); else element.classes.delete(name);
+    };
+    document.querySelector = selector => selector === 'search-bar' ? searchBar :
+        selector === 'geo-weather-bar' ? geo : selector === 'footer' ? footer :
+        { setAttribute: (_name, value) => { theme = value; } };
+    const context = vm.createContext({ window: { matchMedia: () => media }, document, queueMicrotask });
     vm.runInContext(source('global.js'), context);
-    assert.equal(theme, 'light');
+    const send = (type, inside, key) => {
+        const event = new Event(type);
+        event.composedPath = () => inside ? [searchBar, document] : [document];
+        event.key = key;
+        document.dispatchEvent(event);
+    };
+    return { media, searchBar, geo, footer, send, theme: () => theme };
+}
+
+test('clock theme follows initial preference and subsequent changes', () => {
+    const { media, theme } = globalContext();
+    assert.equal(theme(), 'light');
     media.matches = true; media.dispatchEvent(new Event('change'));
-    assert.equal(theme, 'dark');
+    assert.equal(theme(), 'dark');
     media.matches = false; media.dispatchEvent(new Event('change'));
-    assert.equal(theme, 'light');
+    assert.equal(theme(), 'light');
+});
+
+test('weather stays hidden across search buttons and non-focusable engine choices', async () => {
+    const { searchBar, geo, footer, send } = globalContext();
+    const root = searchBar.shadowRoot;
+    send('focusin', true);
+    assert.ok(geo.classList.contains('animated-hidden'));
+    for (const target of [new Element('button'), null]) {
+        send('pointerdown', true);
+        root.activeElement = target;
+        root.dispatchEvent(new Event('focusout'));
+        await Promise.resolve();
+        assert.ok(geo.classList.contains('animated-hidden'));
+        assert.ok(footer.classList.contains('is-hidden'));
+    }
+    send('pointerdown', false);
+    assert.equal(geo.classList.contains('animated-hidden'), false);
+    assert.equal(footer.classList.contains('is-hidden'), false);
+});
+
+test('Tab or programmatic focus leaving search restores weather', async () => {
+    const { searchBar, geo, send } = globalContext();
+    const root = searchBar.shadowRoot;
+    send('pointerdown', true);
+    send('keydown', true, 'Tab');
+    root.activeElement = null;
+    root.dispatchEvent(new Event('focusout'));
+    await Promise.resolve();
+    assert.equal(geo.classList.contains('animated-hidden'), false);
+    send('pointerdown', true);
+    root.dispatchEvent(new Event('focusout'));
+    send('focusin', false);
+    await Promise.resolve();
+    assert.equal(geo.classList.contains('animated-hidden'), false);
 });
