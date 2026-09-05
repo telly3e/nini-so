@@ -23,7 +23,7 @@ geoWeatherBarTemplate.innerHTML = /*html*/`
         /* 关键：设置一个足够大的 max-height，必须比你组件的实际高度要大。
            根据实际情况调整这个值。
         */
-        max-height: 120px;
+        max-height: 460px;
 
         /* --- 动画的定义 --- */
         /* 为多个属性分别定义过渡效果，可以让动画更有层次感 */
@@ -110,6 +110,19 @@ geoWeatherBarTemplate.innerHTML = /*html*/`
     height: 20px;
 }
 
+.controls, .city-form { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; margin-top: 6px; }
+button, input, select { font: inherit; color: inherit; background: transparent; border: 1px solid #8886; border-radius: 6px; padding: 4px 8px; }
+button { cursor: pointer; }
+input { min-width: 0; width: 160px; }
+select { max-width: 100%; }
+option { color: #222; background: #fff; }
+.status { text-align: center; font-size: 12px; opacity: .8; margin-top: 5px; }
+.settings { max-width: 360px; margin: 4px auto; padding: 6px; }
+:host(:not([show-settings])) .settings,
+:host(:not([show-settings])) .location-status { display: none; }
+summary { cursor: pointer; text-align: center; font-size: 12px; }
+[hidden] { display: none !important; }
+.geo-bar { flex-wrap: wrap; }
 </style>
 
 <div class="weather-geo">
@@ -136,10 +149,32 @@ geoWeatherBarTemplate.innerHTML = /*html*/`
         <div class="geo-region">Region</div>
         <div class="geo-city">City</div>
     </div>
+    <p class="status location-status" role="status" aria-live="polite"></p>
+    <details class="settings">
+        <summary>天气位置设置</summary>
+        <div class="controls">
+            <button type="button" class="device">使用设备位置</button>
+            <button type="button" class="auto">自动 IP 定位</button>
+            <button type="button" class="retry">刷新</button>
+            <select class="strategy" aria-label="自动定位策略">
+                <option value="china">国内优先（最多多等 1.2 秒）</option>
+                <option value="fastest">最快有效结果</option>
+            </select>
+        </div>
+        <form class="city-form">
+            <input class="city-query" aria-label="城市名称" placeholder="城市名，如苏州 / Suzhou" required minlength="2" maxlength="80">
+            <button type="submit">查找城市</button>
+        </form>
+        <div class="controls city-selection" hidden>
+            <select class="city-results" aria-label="选择具体城市"></select>
+            <button type="button" class="save-city">固定此城市</button>
+        </div>
+        <p class="status city-status" role="status"></p>
+    </details>
 </div>
 `
 
-class GeoWeatehrBar extends HTMLElement {
+class GeoWeatherBar extends HTMLElement {
     constructor() {
         super();
         this.attachShadow({ mode: 'open' });
@@ -204,155 +239,147 @@ class GeoWeatehrBar extends HTMLElement {
     }
 
 
-    async getGeoData() {
-        // 定义两个API的请求函数
-        // 每个函数都包含 fetch、错误检查 和 数据标准化
-        const fetchFromIpApi = async () => {
-            const response = await fetch('https://ipapi.co/json/');
-            if (!response.ok) {
-                throw new Error(`ipapi.co failed with status: ${response.status}`);
-            }
-            const data = await response.json();
-            return ['ipapi', data];
-        };
-
-        const fetchFromFreeIpApi = async () => {
-            // 注意：你需要确认 freeipapi.com 的确切URL，这里假设是 HTTPS
-            const response = await fetch('https://free.freeipapi.com/api/json');
-            if (!response.ok) {
-                throw new Error(`freeipapi.com failed with status: ${response.status}`);
-            }
-            const data = await response.json();
-            return ['freeipapi', data];
-        };
-
-        try {
-            // 将两个API的调用（它们返回Promise）放入一个数组
-            const promises = [
-                fetchFromIpApi(),
-                fetchFromFreeIpApi()
-            ];
-
-            // Promise.any 会等待第一个成功的Promise，并返回其结果
-            const firstResult = await Promise.any(promises);
-
-            // 使用最快返回的、且已标准化的结果
-            console.log(`Data from the fastest API (${firstResult[0]}):`);
-            if (firstResult[0] === 'freeipapi') {
-                console.log(`You are in ${firstResult[1].cityName}, ${firstResult[1].regionName}, ${firstResult[1].countryName}.`);
-                console.log(`Latitude:${firstResult[1].latitude}, Longitude:${firstResult[1].longitude}`);
-            } else if (firstResult[0] === 'ipapi') {
-                console.log(`You are in ${firstResult[1].city}, ${firstResult[1].country_name}.`);
-                console.log(`Latitude:${firstResult[1].latitude}, Longitude:${firstResult[1].longitude}`);
-            }
-
-            console.log('Full Geo data object:', firstResult[1]);
-
-            return firstResult;
-
-        } catch (error) {
-            // 只有当所有的Promise都失败时，Promise.any才会抛出错误
-            // error 会是一个 AggregateError，包含了所有失败的原因
-            console.error('All APIs failed to provide geo data.');
-            console.error(error);
-            throw error;
-        }
+    readSetting(key) {
+        try { return JSON.parse(localStorage.getItem(key)); } catch { return null; }
     }
 
-
-    async getWeatherData(geoData) {
-        // Use a try...catch block to handle potential network errors
-
-        // 1. Fetch the API endpoint and wait for the response
-        const response = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${geoData[1].latitude}&longitude=${geoData[1].longitude}&current=temperature_2m,is_day,weather_code,rain,showers,snowfall,wind_speed_10m,relative_humidity_2m&wind_speed_unit=ms&forecast_minutely_15=4&past_minutely_15=4`);
-
-        // Check if the request was successful (status code 200-299)
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
-        // 2. Parse the JSON response body and wait for it to complete
-        const data = await response.json();
-
-        // 3. Now you can use the data from the JSON object
-        console.log('Full weather data object:', data);
-        return data;
-
+    saveSetting(key, value) {
+        try { localStorage.setItem(key, JSON.stringify(value)); return true; } catch { return false; }
     }
+
+    setStatus(message) { this.shadowRoot.querySelector('.status').textContent = message; }
 
     async updateWeatherGeoInfo() {
-        let geoData;
-        let weatherData;
-
-        // --- geo data ---
+        this.request?.abort();
+        const request = this.request = new AbortController();
+        const { signal } = request;
+        this.setStatus('正在获取天气…');
+        this.shadowRoot.querySelector('.weather-bar').classList.add('invisible');
+        this.shadowRoot.querySelector('.geo-bar').classList.add('invisible');
         try {
+            const geo = this.fixedCity || this.deviceLocation || await WeatherService.locate({
+                preferChina: this.strategy.value !== 'fastest',
+                domesticUrl: this.getAttribute('domestic-geo-url'), signal
+            });
+            if (signal.aborted) return;
+            const values = [geo.country, geo.region, geo.city];
+            [this.geoCountry, this.geoRegion, this.geoCity].forEach((element, i) => {
+                element.textContent = values[i];
+                element.classList.toggle('is-hidden', !values[i] || values.slice(0, i).includes(values[i]));
+            });
             this.shadowRoot.querySelector('.geo-bar').classList.remove('invisible');
-            geoData = await this.getGeoData();
-        } catch (error) {
-            console.log('IP-api获取失败', error);
-            this.shadowRoot.querySelector('.geo-bar').classList.add('invisible');
-            this.shadowRoot.querySelector('.weather-bar').classList.add('invisible');
-        }
-
-        // 位置
-        // 从 geoData 中解构并获取数据，使用短变量名让代码更简洁
-        let region, city, country;
-        if (geoData[0] === 'freeipapi') {
-            region = geoData[1].regionName;
-            city = geoData[1].cityName;
-            country = geoData[1].countryName;
-        } else if (geoData[0] === 'ipapi') {
-            region = geoData[1].region;
-            city = geoData[1].city;
-            country = geoData[1].country_name;
-        }
-
-        // 1. 先清空所有元素的现有内容，这对于重复调用函数很重要
-        this.geoCity.innerHTML = '';
-        this.geoRegion.innerHTML = '';
-        this.geoCountry.innerHTML = '';
-
-        // 2. 按顺序处理和赋值
-        let lastValue = null; // 用于跟踪上一个赋的值，避免重复
-
-        // 首先处理国家，因为它是最基础的单位
-        if (country) {
-            this.geoCountry.innerHTML = country;
-            lastValue = country;
-        }
-
-        // 接着处理地区，前提是地区存在且不与国家名称重复
-        if (region && region !== lastValue) {
-            this.geoRegion.innerHTML = region;
-            lastValue = region;
-        } else {
-            this.geoRegion.classList.add('is-hidden');
-        }
-
-        // 最后处理城市，前提是城市存在且不与地区名称重复
-        // （如果地区和国家一样，lastValue已经是国家名了，这里也能正确处理）
-        if ((city && city !== lastValue) && (city !== country)) {
-            this.geoCity.innerHTML = city;
-        } else {
-            this.geoCity.classList.add('is-hidden');
-        }
-
-
-
-
-        // --- weather data ---
-        try {
+            const key = `${geo.latitude.toFixed(3)},${geo.longitude.toFixed(3)}`;
+            const cache = this.readSetting('weather-cache-v1');
+            const cached = cache?.key === key && Date.now() >= cache.savedAt && Date.now() - cache.savedAt < 600000 && WeatherService.validWeather(cache.data);
+            const data = cached ? cache.data : await WeatherService.weather(geo, signal);
+            if (signal.aborted) return;
+            if (!cached) this.saveSetting('weather-cache-v1', { key, savedAt: Date.now(), data });
+            this.renderWeather(data);
             this.shadowRoot.querySelector('.weather-bar').classList.remove('invisible');
-            weatherData = await this.getWeatherData(geoData);
-        } catch (error) {
-            console.log('天气获取失败', error);
-            this.shadowRoot.querySelector('.weather-bar').classList.add('invisible');
+            const hint = this.fixedCity ? '固定城市' : this.deviceLocation ? '设备位置' :
+                `IP 估算 · ${geo.source}${geo.countryCode !== 'CN' ? ' · 可能是代理出口' : ''}`;
+            this.setStatus(`${hint}${cached ? ' · 10 分钟内缓存' : ''}`);
+        } catch {
+            if (!signal.aborted) this.setStatus('定位或天气暂不可用，请选择城市、使用设备位置或重试');
         }
+    }
 
+    async useDevice() {
+        if (!window.isSecureContext || !navigator.geolocation) {
+            this.setStatus('设备定位需要 HTTPS 和浏览器支持，请改用固定城市');
+            return;
+        }
+        const version = ++this.deviceVersion;
+        this.request?.abort();
+        this.setStatus('等待设备定位授权…');
+        navigator.geolocation.getCurrentPosition(position => {
+            if (version !== this.deviceVersion || !this.isConnected) return;
+            try {
+                this.deviceLocation = WeatherService.location({ latitude: position.coords.latitude,
+                    longitude: position.coords.longitude, city: '设备所在位置', source: '设备位置' });
+                this.fixedCity = null;
+                this.saveSetting('weather-city-v1', null);
+                this.updateWeatherGeoInfo();
+            } catch { this.setStatus('设备坐标无效，请选择城市'); }
+        }, () => {
+            if (version === this.deviceVersion && this.isConnected) this.setStatus('设备定位失败或未获授权，请选择城市或恢复自动定位');
+        }, { enableHighAccuracy: false, timeout: 8000, maximumAge: 300000 });
+    }
+
+    async searchCities(event) {
+        event.preventDefault();
+        this.cityRequest?.abort();
+        const request = this.cityRequest = new AbortController();
+        const status = this.shadowRoot.querySelector('.city-status');
+        this.shadowRoot.querySelector('.city-selection').hidden = true;
+        status.textContent = '正在查找城市…';
+        try {
+            const query = this.shadowRoot.querySelector('.city-query').value.trim();
+            if (query.length < 2) throw new Error('城市名过短');
+            const cities = await WeatherService.cities(query, request.signal);
+            if (request.signal.aborted) return;
+            this.cities = cities;
+            const select = this.shadowRoot.querySelector('.city-results');
+            select.replaceChildren();
+            cities.forEach((city, i) => {
+                const option = document.createElement('option');
+                option.value = i;
+                option.textContent = [city.city, city.region, city.country].filter(Boolean).join(' · ');
+                select.appendChild(option);
+            });
+            this.shadowRoot.querySelector('.city-selection').hidden = !cities.length;
+            status.textContent = cities.length ? '确认省份和国家后固定城市，下次打开自动使用。' : '没有找到城市，试试拼音或附近的大城市';
+        } catch {
+            if (!request.signal.aborted) status.textContent = '城市查询失败，请稍后重试';
+        }
+    }
+
+    connectedCallback() {
+        this.events?.abort();
+        this.events = new AbortController();
+        this.deviceVersion = 0;
+        const on = (selector, event, fn) => this.shadowRoot.querySelector(selector).addEventListener(event, fn, { signal: this.events.signal });
+        this.strategy = this.shadowRoot.querySelector('.strategy');
+        this.strategy.value = this.readSetting('weather-strategy-v1') === 'fastest' ? 'fastest' : 'china';
+        try { this.fixedCity = WeatherService.location(this.readSetting('weather-city-v1')); } catch { this.fixedCity = null; }
+        on('.city-form', 'submit', event => this.searchCities(event));
+        on('.device', 'click', () => this.useDevice());
+        on('.auto', 'click', () => {
+            ++this.deviceVersion;
+            this.fixedCity = this.deviceLocation = null;
+            const saved = this.saveSetting('weather-city-v1', null);
+            this.updateWeatherGeoInfo();
+            this.shadowRoot.querySelector('.city-status').textContent = saved ? '' : '浏览器禁止保存设置，本次切换仅在当前页面有效';
+        });
+        on('.retry', 'click', () => { ++this.deviceVersion; this.saveSetting('weather-cache-v1', null); this.updateWeatherGeoInfo(); });
+        on('.strategy', 'change', () => {
+            this.saveSetting('weather-strategy-v1', this.strategy.value);
+            if (!this.fixedCity && !this.deviceLocation) { ++this.deviceVersion; this.updateWeatherGeoInfo(); }
+        });
+        on('.save-city', 'click', () => {
+            const city = this.cities?.[this.shadowRoot.querySelector('.city-results').value];
+            if (!city) return;
+            ++this.deviceVersion;
+            this.fixedCity = city;
+            this.deviceLocation = null;
+            const saved = this.saveSetting('weather-city-v1', city);
+            this.shadowRoot.querySelector('.city-status').textContent = saved ? '已保存固定城市' : '本次已切换，但浏览器禁止保存设置';
+            this.updateWeatherGeoInfo();
+        });
+        this.updateWeatherGeoInfo();
+    }
+
+    disconnectedCallback() {
+        ++this.deviceVersion;
+        this.events?.abort();
+        this.request?.abort();
+        this.cityRequest?.abort();
+    }
+
+    renderWeather(weatherData) {
         // 天气图标
         if ([95, 96, 99].includes(Number(weatherData.current.weather_code))) {
             let additionWeather = '';
-            console.log('--special thunderstorm weather🌩️--');
             if (weatherData.current.snowfall > 0) {
                 additionWeather = '-snow';
             } else if (weatherData.current.rain > 0 || weatherData.current.showers > 0) {
@@ -363,28 +390,27 @@ class GeoWeatehrBar extends HTMLElement {
         } else if ([0, 1, 2, 3, 45, 48].includes(Number(weatherData.current.weather_code))) {
             this.weatherIcon.setAttribute('src', `./img/weather-icon/${this.WEATHER_CODE_ICON[weatherData.current.weather_code]}${weatherData.current.is_day ? 'd' : 'n'}.svg`);
         } else {
-            this.weatherIcon.setAttribute('src', `./img/weather-icon/${this.WEATHER_CODE_ICON[weatherData.current.weather_code]}.svg`);
+            this.weatherIcon.setAttribute('src', `./img/weather-icon/${this.WEATHER_CODE_ICON[weatherData.current.weather_code] || 'not-available'}.svg`);
         }
 
         // 温度度数
-        this.weatherDegree.innerHTML = `${weatherData.current.temperature_2m} `;
+        this.weatherDegree.textContent = `${weatherData.current.temperature_2m} `;
         // 温度单位C or F
         this.degreeUnit.setAttribute('src', `./img/weather-icon/${weatherData.current_units.temperature_2m.includes('C') ? 'celsius' : 'fahrenheit'}.svg`);
         // 风速
-        this.windSpeed.innerHTML = `${weatherData.current.wind_speed_10m} ${weatherData.current_units.wind_speed_10m} `;
+        this.windSpeed.textContent = `${weatherData.current.wind_speed_10m} ${weatherData.current_units.wind_speed_10m} `;
         // 湿度
-        this.humidity.innerHTML = `${weatherData.current.relative_humidity_2m} ${weatherData.current_units.relative_humidity_2m} `
+        this.humidity.textContent = `${weatherData.current.relative_humidity_2m} ${weatherData.current_units.relative_humidity_2m} `
 
         // 天气描述
-        if (country === 'China') {
-            this.weatherInfo.innerHTML = `${this.WEATHER_CODE_INFO_ZH[weatherData.current.weather_code]}`
+        if ((navigator.language || '').startsWith('zh')) {
+            this.weatherInfo.textContent = this.WEATHER_CODE_INFO_ZH[weatherData.current.weather_code] || '未知天气'
         } else {
-            this.weatherInfo.innerHTML = `${this.WEATHER_CODE_INFO_EN[weatherData.current.weather_code]}`
+            this.weatherInfo.textContent = this.WEATHER_CODE_INFO_EN[weatherData.current.weather_code] || 'Unknown weather'
         }
 
     }
 
-    connectedCallback() { this.updateWeatherGeoInfo() }
 }
 
-window.customElements.define('geo-weather-bar', GeoWeatehrBar);
+window.customElements.define('geo-weather-bar', GeoWeatherBar);

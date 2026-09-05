@@ -16,10 +16,8 @@ searchInput.addEventListener('blur', () => {
 // 创建一个媒体查询列表对象，用于检查用户是否偏好深色模式
 const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
 
-if (mediaQuery.matches) {
-    console.log('用户当前处于深色模式');
-    document.querySelector('flipper-clock').setAttribute('theme', 'dark');
-} else {
-    console.log('用户当前处于浅色模式');
-    document.querySelector('flipper-clock').setAttribute('theme', 'light');
+function syncClockTheme() {
+    document.querySelector('flipper-clock')?.setAttribute('theme', mediaQuery.matches ? 'dark' : 'light');
 }
+syncClockTheme();
+mediaQuery.addEventListener('change', syncClockTheme);

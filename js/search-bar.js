@@ -424,10 +424,8 @@ class SearchBar extends HTMLElement {
         this.clearBtn = this.shadowRoot.querySelector('.clear-btn');
         this.searchSuggest = this.shadowRoot.querySelector(".search-suggest");
 
-        // MODIFIED: The cache is still an object, but we will use it to store engine-specific caches.
-        this.suggestionsCache = {};
-        this.currentQuery = '';
-        this.currentRequestEngine = ''; // To track the engine for the current request
+        // Cache keys contain both the engine and query.
+        this.suggestionsCache = new Map();
     }
 
     renderSearchEngines() {
@@ -444,15 +442,15 @@ class SearchBar extends HTMLElement {
         }
     }
 
-    // MODIFIED: Added logic to hide suggestions when the engine changes.
     updateEngineViaAttribute(engineAttribute) {
+        if (!Object.hasOwn(this.SEARCH_ENGINES, engineAttribute)) engineAttribute = 'baidu';
+        this.cancelSuggestions();
         this.engineCollection.querySelectorAll('.engine-item').forEach(btn => btn.classList.remove('active'));
         const selectedItem = this.shadowRoot.querySelector(`[data-engine="${engineAttribute}"]`);
         if (selectedItem) {
             selectedItem.classList.add('active');
             this.selectedEngine = engineAttribute;
             this.searchSuggest.classList.add('is-hidden'); // Hide suggestions on engine switch
-            console.log(`Search engine switched to ${this.selectedEngine}`);
         }
     }
 
@@ -463,104 +461,71 @@ class SearchBar extends HTMLElement {
         }
     }
 
-    // --- Search Suggestions ---
+    // Each JSONP response belongs to one component, engine and query.
+    static nextRequestId = 0;
 
-    // MODIFIED: getSuggestions now checks the engine-specific cache.
+    cancelSuggestions() {
+        const request = this.suggestionRequest;
+        if (!request) return;
+        clearTimeout(request.timer);
+        request.script.remove();
+        delete window[request.callbackName];
+        this.suggestionRequest = null;
+    }
+
     getSuggestions() {
-        const valWord = this.searchInput.value.trim();
-
-        if (!valWord) {
-            this.searchSuggest.innerHTML = '';
+        this.cancelSuggestions();
+        const query = this.searchInput.value.trim();
+        const engine = this.selectedEngine;
+        if (!query || engine === 'duckduckgo') {
+            this.searchSuggest.replaceChildren();
             this.searchSuggest.classList.add('is-hidden');
             return;
         }
-
-        // MODIFIED: Check cache for the current engine.
-        // The optional chaining (?.) prevents an error if the engine has no cache yet.
-        if (this.suggestionsCache[this.selectedEngine]?.[valWord]) {
-            console.log(`Rendering suggestions for "${valWord}" on "${this.selectedEngine}" from cache.`);
-            this.renderSuggestions(this.suggestionsCache[this.selectedEngine][valWord]);
+        const cacheKey = JSON.stringify([engine, query]);
+        if (this.suggestionsCache.has(cacheKey)) {
+            this.renderSuggestions(this.suggestionsCache.get(cacheKey));
             return;
         }
-
         this.engineCollection.classList.add('is-hidden');
         this.engineBtn.classList.remove('btn-active');
         this.searchSuggest.classList.remove('is-hidden');
         this.searchSuggest.innerHTML = `<img class='loader' src='./img/dark-loader.svg'>`;
 
-        this.currentQuery = valWord;
-        this.currentRequestEngine = this.selectedEngine; // MODIFIED: Remember the engine for this request.
-
-        const old = document.getElementById("jsonp_script");
-        if (old) document.body.removeChild(old);
-
-        window.jsonpCallback = this.jsonpCallback.bind(this);
-
-        let url = "";
-        const callbackName = "jsonpCallback";
-
-        switch (this.selectedEngine) {
-            case "baidu":
-                url = `https://www.baidu.com/sugrec?pre=1&p=3&ie=utf-8&json=1&prod=pc&wd=${encodeURIComponent(valWord)}&cb=${callbackName}`;
-                break;
-            case "bing":
-                url = `https://api.bing.com/qsonhs.aspx?type=cb&q=${encodeURIComponent(valWord)}&cb=${callbackName}`;
-                break;
-            case "google":
-                url = `https://suggestqueries.google.com/complete/search?client=chrome&q=${encodeURIComponent(valWord)}&callback=${callbackName}`;
-                break;
-        }
-
-        if (!url) {
-            this.searchSuggest.classList.add('is-hidden');
-            return;
+        const callbackName = `siuSuggestions${++SearchBar.nextRequestId}`;
+        const term = encodeURIComponent(query);
+        const urls = {
+            baidu: `https://www.baidu.com/sugrec?pre=1&p=3&ie=utf-8&json=1&prod=pc&wd=${term}&cb=${callbackName}`,
+            bing: `https://api.bing.com/qsonhs.aspx?type=cb&q=${term}&cb=${callbackName}`,
+            google: `https://suggestqueries.google.com/complete/search?client=chrome&q=${term}&callback=${callbackName}`
         };
-
-        const sc = document.createElement("script");
-        sc.src = url;
-        sc.id = "jsonp_script";
-        document.body.appendChild(sc);
-    }
-
-    // MODIFIED: jsonpCallback now saves to the engine-specific cache.
-    jsonpCallback(data) {
-        // Use the engine that was active when the request was made.
-        const engineForRequest = this.currentRequestEngine;
-        let suggestions = [];
-
-        switch (engineForRequest) {
-            case "baidu":
-                suggestions = data?.g?.map(item => item.q) || [];
-                break;
-            case "bing":
-                suggestions = data?.AS?.Results?.[0]?.Suggests?.map(item => item.Txt) || [];
-                break;
-            case "google":
-                suggestions = data?.[1] || [];
-                break;
-        }
-
-        const uniqueSuggestions = [...new Set(suggestions)].slice(0, 10);
-
-        // MODIFIED: Create a cache object for the engine if it doesn't exist.
-        if (!this.suggestionsCache[engineForRequest]) {
-            this.suggestionsCache[engineForRequest] = {};
-        }
-
-        // MODIFIED: Save the suggestions to the engine-specific cache.
-        this.suggestionsCache[engineForRequest][this.currentQuery] = uniqueSuggestions;
-        console.log(`Fetched and cached suggestions for "${this.currentQuery}" on "${engineForRequest}".`);
-
-        // Only render the suggestions if the input value hasn't changed to something else
-        if (this.currentQuery === this.searchInput.value.trim()) {
-            this.renderSuggestions(uniqueSuggestions);
-        }
-
-        const sc = document.getElementById("jsonp_script");
-        if (sc) sc.remove();
-        delete window.jsonpCallback;
-
-        console.log(engineForRequest, data);
+        const script = document.createElement('script');
+        const request = { script, callbackName, engine, query, cacheKey };
+        this.suggestionRequest = request;
+        const fail = () => {
+            if (this.suggestionRequest !== request) return;
+            this.cancelSuggestions();
+            this.searchSuggest.replaceChildren();
+            this.searchSuggest.classList.add('is-hidden');
+        };
+        window[callbackName] = data => {
+            if (this.suggestionRequest !== request) return;
+            const raw = engine === 'baidu' ? data?.g : engine === 'bing' ? data?.AS?.Results?.[0]?.Suggests : data?.[1];
+            const values = Array.isArray(raw) ? raw.map(item => engine === 'baidu' ? item?.q : engine === 'bing' ? item?.Txt : item) : [];
+            const suggestions = [...new Set(values.filter(value => typeof value === 'string'))].slice(0, 10);
+            // Bound the cache rather than retaining every query for the page's lifetime.
+            if (this.suggestionsCache.size >= 100) this.suggestionsCache.delete(this.suggestionsCache.keys().next().value);
+            this.suggestionsCache.set(cacheKey, suggestions);
+            this.cancelSuggestions();
+            if (this.isConnected && engine === this.selectedEngine && query === this.searchInput.value.trim()) {
+                this.renderSuggestions(suggestions);
+            }
+        };
+        script.src = urls[engine];
+        script.onerror = fail;
+        script.onload = fail; // A script that never invokes its callback is also a failure.
+        request.timer = setTimeout(fail, 6500);
+        document.body.appendChild(script);
     }
 
     renderSuggestions(suggestions) {
@@ -577,25 +542,28 @@ class SearchBar extends HTMLElement {
         suggestions.forEach(txt => {
             const suggestDiv = document.createElement("div");
             suggestDiv.classList.add('suggest');
-            suggestDiv.innerHTML = `
-                <img class='suggest-icon' src='./img/suggest.svg'>
-                <span class='keyword'>${txt}</span>`;
-            suggestDiv.addEventListener('mousedown', (event) => {
-                event.preventDefault();
-                this.searchInput.value = txt;
-                this.form.requestSubmit();
-            });
+            const icon = document.createElement('img');
+            icon.className = 'suggest-icon';
+            icon.src = './img/suggest.svg';
+            icon.alt = '';
+            const keyword = document.createElement('span');
+            keyword.className = 'keyword';
+            keyword.textContent = txt;
+            suggestDiv.append(icon, keyword);
             this.searchSuggest.appendChild(suggestDiv);
         });
     }
 
     connectedCallback() {
+        this.events?.abort();
+        this.events = new AbortController();
+        const on = (target, type, handler) => target.addEventListener(type, handler, { signal: this.events.signal });
         this.renderSearchEngines();
 
         this.selectedEngine = mySettings['prefer_engine'];
         this.updateEngineViaAttribute(this.selectedEngine);
 
-        this.engineCollection.addEventListener('click', (event) => {
+        on(this.engineCollection, 'click', (event) => {
             const clickedBtn = event.target.closest('.engine-item');
             if (!clickedBtn) return;
             const engineName = clickedBtn.dataset.engine;
@@ -606,55 +574,66 @@ class SearchBar extends HTMLElement {
             }
         });
 
-        this.form.addEventListener('submit', (event) => {
+        on(this.form, 'submit', (event) => {
             const engineConfig = this.SEARCH_ENGINES[this.selectedEngine];
             this.form.action = engineConfig.action;
             this.searchInput.name = engineConfig.name;
         });
 
-        this.searchInput.addEventListener('focus', () => {
+        on(this.searchInput, 'focus', () => {
             if (this.searchInput.value) {
                 this.getSuggestions();
             }
         });
 
-        this.searchInput.addEventListener('invalid', (event) => {
+        on(this.searchInput, 'invalid', (event) => {
             event.preventDefault();
         });
 
-        this.clearBtn.addEventListener('click', () => {
+        on(this.clearBtn, 'click', () => {
+            this.cancelSuggestions();
             this.inputElement.value = '';
             this.searchSuggest.innerHTML = '';
             this.searchSuggest.classList.add('is-hidden');
             this.inputElement.focus();
         });
 
-        document.addEventListener('click', (event) => {
+        on(document, 'click', (event) => {
             if (!this.contains(event.target)) {
                 this.engineCollection.classList.add('is-hidden');
                 this.engineBtn.classList.remove('btn-active');
+                this.cancelSuggestions();
                 this.searchSuggest.classList.add('is-hidden');
             }
         });
 
-        this.shadowRoot.addEventListener('click', (event) => {
+        on(this.shadowRoot, 'click', (event) => {
             if (!event.target.closest('.engine-btn') && !this.engineCollection.classList.contains('is-hidden')) {
                 this.engineCollection.classList.toggle('is-hidden');
                 this.engineBtn.classList.toggle('btn-active');
             }
         })
 
-        this.engineBtn.addEventListener('click', () => {
+        on(this.engineBtn, 'click', () => {
+            this.cancelSuggestions();
             this.engineCollection.classList.toggle('is-hidden');
             this.engineBtn.classList.toggle('btn-active');
             this.searchSuggest.classList.add('is-hidden');
         });
 
-        this.searchInput.addEventListener("input", () => this.getSuggestions());
+        on(this.searchInput, "input", () => this.getSuggestions());
 
-        this.searchInput.addEventListener('keydown', (e) => {
+        on(this.searchSuggest, 'mousedown', event => {
+            const suggestion = event.target.closest('.suggest');
+            if (!suggestion || this.searchSuggest.classList.contains('is-hidden')) return;
+            event.preventDefault();
+            this.searchInput.value = suggestion.querySelector('.keyword').textContent;
+            this.form.requestSubmit();
+        });
+
+        on(this.searchInput, 'keydown', (e) => {
             const suggestions = this.searchSuggest.querySelectorAll('.suggest');
-            if (suggestions.length === 0) {
+            if (suggestions.length === 0 || this.searchSuggest.classList.contains('is-hidden')) {
                 return;
             }
 
@@ -689,18 +668,13 @@ class SearchBar extends HTMLElement {
             }
         });
 
-        if (!mySettings) {
-            this.updateDefaultEngine();
-        }
     }
 
     disconnectedCallback() {
-        this.engineCollection.removeEventListener('click');
-        this.form.removeEventListener('submit');
-        this.searchInput.removeEventListener('invalid');
-        this.clearBtn.removeEventListener('click');
-        this.engineBtn.removeEventListener('click');
-        this.searchInput.removeEventListener('input');
+        this.events?.abort();
+        this.cancelSuggestions();
+        this.searchSuggest.replaceChildren();
+        this.searchSuggest.classList.add('is-hidden');
     }
 }
 

@@ -1,22 +1,27 @@
+function normalizeUserSettings(value) {
+    const settings = value && typeof value === 'object' && !Array.isArray(value) ? { ...value } : {};
+    if (!['baidu', 'bing', 'google', 'duckduckgo'].includes(settings.prefer_engine)) {
+        settings.prefer_engine = 'baidu';
+    }
+    return settings;
+}
+
 function getOrCreateUserSettings() {
-    const settingsKey = 'userSettings';
-
-  // 尝试读取并解析，如果结果为 null 或 undefined，则使用 || 后面的默认值
-    const settings = JSON.parse(localStorage.getItem(settingsKey)) || {
-    prefer_engine: 'baidu',
-    };
-
-  // 确保无论如何 localStorage 中都有最新的设置
-    localStorage.setItem(settingsKey, JSON.stringify(settings));
-
+    let stored;
+    try { stored = JSON.parse(localStorage.getItem('userSettings')); } catch { /* Use defaults. */ }
+    const settings = normalizeUserSettings(stored);
+    updateUserSetting(settings);
     return settings;
 }
 
 function updateUserSetting(settings) {
-    const settingsKey = 'userSettings';
-    localStorage.setItem(settingsKey, JSON.stringify(settings));
+    try {
+        localStorage.setItem('userSettings', JSON.stringify(normalizeUserSettings(settings)));
+        return true;
+    } catch {
+        // Storage can be unavailable or full; current-page preferences still work.
+        return false;
+    }
 }
 
-// 使用方式和效果与上一个函数完全相同
 const mySettings = getOrCreateUserSettings();
-console.log(mySettings);
